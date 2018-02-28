@@ -1,28 +1,5 @@
 <template>
   <div class="map-operator">
-    <!--<div class="showMarker" @click="showMarker">-->
-      <!--<div>{{vMarkerClustererStatus ? '隐藏markers' : '显示markers'}}</div>-->
-    <!--</div>-->
-    <!--<div class="drawing" @click="bind">-->
-      <!--<div>step：{{step}}</div>-->
-    <!--</div>-->
-    <!--<div class="submit"  @click="submit">-->
-      <!--<div>提交</div>-->
-    <!--</div>-->
-    <!--<div class="tuning"  @click="tuning">-->
-      <!--<div>微调</div>-->
-    <!--</div>-->
-    <!--<div class="clear" @click="clear">-->
-      <!--<div>清空</div>-->
-    <!--</div>-->
-    <!--<div class="allClear" @click="allClear">-->
-      <!--<div>重置</div>-->
-    <!--</div>-->
-    <!--<div class="fullScreen" @click="fullScreen">-->
-      <!--<div>{{fullStatus ? '适应屏' : '全屏'}}</div>-->
-    <!--</div>-->
-
-
     <div @click="showMarker">
       <div>{{vMarkerClustererStatus ? '隐藏markers' : '显示markers'}}</div>
     </div>
@@ -51,15 +28,17 @@
 </template>
 <script>
   import AMap from 'AMap'
-  import pointArea from './pointArea'
+  import AMapBus from '@/components/Map/bus'
   export default {
     props: [
       'map',
       'fullStatus',
-      'vMarkerClustererStatus'
+      'vMarkerClustererStatus',
+      'prePolygonArr'
     ],
     data() {
       return {
+        edtPrePolygonStatus: false,
         clickListener: '',
         ListenerStatus: false,
         markerArray: [],
@@ -78,28 +57,61 @@
       }
     },
     created() {
+      // 监听 页面传入 初始的 覆盖区域 的 经纬度 二重数组
+      const _this = this
+      AMapBus.$on('clrPrePolygon', target => {
+        // 清空调整前的 覆盖区域(视图)
+        for (let i = 0; i < this.prePolygon.length; i++) {
+          // console.log('this.prePolygon', this.prePolygon)
+        }
+      })
+      AMapBus.$on('edtPrePolygon', target => {
+        if (_this.edtPrePolygonStatus) {
+          this.prePolygon[target].editor.close()
+          const path = this.prePolygon[target].obj.Pg.path
+          const Arr = []
+          for (let i = 0; i < path.length; i++) {
+            Arr.push([path[i].lng, path[i].lat])
+          }
+          // 关闭 调整后, 将 数组传回给调用页面
+          AMapBus.$emit('confirmPrePloygon', Arr)
+        } else {
+          this.prePolygon[target].editor.open()
+        }
+        _this.edtPrePolygonStatus = !_this.edtPrePolygonStatus
+      })
+    },
+    mounted() {
+      // 渲染 页面传入的 初始覆盖区域
       const _this = this
       this.$nextTick(() => {
-        for (let i = 0; i < pointArea.length; i++) {
+        for (let i = 0; i < _this.prePolygonArr.length; i++) {
           const _polygon = new AMap.Polygon({
             map: _this.map,
-            path: pointArea[i],
+            path: _this.prePolygonArr[i],
             strokeColor: '#0000ff',
             strokeOpacity: 1,
             strokeWeight: 3,
             fillColor: '#f5deb3',
             fillOpacity: 0.35
           })
-          _this.prePolygon.push(_polygon)
+          // 增加 调整属性给每一个区域对象
+          if (!AMap.PolyEditor) {
+            AMap.plugin(['AMap.PolyEditor'])
+          }
+          _this.prePolygon.push({
+            obj: _polygon,
+            editor: new AMap.PolyEditor(_this.map, _polygon)
+          })
         }
       })
-    },
-    mounted() {
     },
     methods: {
       showMarker() {
         this.$emit('showMarker')
       },
+
+      // 添加 marker点
       addMarker(iconImage, position) {
         const _this = this
         return new AMap.Marker({
@@ -113,6 +125,7 @@
           map: _this.map
         })
       },
+      // 绘制 线路
       drawLine(map, path, strokeColor, strokeOpacity, strokeWeight, strokeStyle, strokeDasharray) {
         return new AMap.Polyline({
           map,
@@ -124,6 +137,7 @@
           strokeDasharray
         })
       },
+      // 监听 click
       bind() {
         const _this = this
         if (this.submitStatus) {
@@ -149,12 +163,14 @@
           })
         }
       },
+      //  绘制
       drawing(Lng, Lat) {
         const _this = this
         _this.markerArraylatlng[_this.step] = ''
         _this.markerArraylatlng[_this.step] = [Lng, Lat]
         _this.polyline[_this.step] = _this.drawLine(_this.map, _this.markerArraylatlng, 'red', 1, 1, 'dashed', [10, 5])
       },
+      // 移除监听
       remove() {
         const _this = this
         if (_this.clickListener) {
@@ -234,6 +250,8 @@
         this.editorStatus = !this.editorStatus
       },
       update() {
+        const _this = this
+        let data = {}
         if (this.editorStatus) {
           this.$notify({
             title: '失败',
@@ -245,15 +263,22 @@
         }
         if (this.editorType === 'polygon') {
           const baseArray = this.PolygonGroup._polygon.Pg.path
-          const Arr = []
+          const Arr = {
+            locationArr: [],
+            area: 0
+          }
           for (let i = 0; i < baseArray.length; i++) {
             if (Array.isArray(baseArray[i])) {
-              Arr.push(baseArray[i])
+              Arr.locationArr.push(baseArray[i])
             } else {
-              Arr.push([baseArray[i].lng, baseArray[i].lat])
+              Arr.locationArr.push([baseArray[i].lng, baseArray[i].lat])
             }
           }
           this.drawPolygon.push(Arr)
+          data = {
+            arr: _this.drawPolygon,
+            type: 'polygon'
+          }
         } else if (this.editorType === 'polyline') {
           const baseArray = this.PolylineGroup._polyline.Pg.path
           const Arr = []
@@ -265,9 +290,13 @@
             }
           }
           this.drawPolyline.push(Arr)
+          data = {
+            arr: _this.drawPolyline,
+            type: 'polyline'
+          }
           this.clearMarker()
         }
-  
+        this.$emit('updateData', data)
         // 回调提示语
         this.$notify({
           title: '成功',

@@ -1,7 +1,7 @@
 <template>
   <div :class="fullScreenStatus ? 'map-wrap-full' : 'map-wrap'" :style="'width:' + mapWidth + '; height:' + mapHeight">
     <div id="eden-map" :class="fullScreenStatus ? 'map-full' : ''"></div>
-    <v-options :map="map" v-show="options" @fullScreen="fullScreen" :fullStatus="fullScreenStatus" @showMarker="changeShowMarker" :vMarkerClustererStatus="vMarkerClustererStatus"></v-options>
+    <v-options :map="map" v-show="options" :prePolygonArr="prePolygon" @fullScreen="fullScreen" :fullStatus="fullScreenStatus" @showMarker="changeShowMarker" :vMarkerClustererStatus="vMarkerClustererStatus" @updateData="updateDatas"></v-options>
   </div>
 </template>
 <script>
@@ -24,8 +24,11 @@ export default {
       vMarkerClustererStatus: true
     }
   },
-  props: ['mapWidth', 'mapHeight', 'options'],
+  props: ['mapWidth', 'mapHeight', 'options', 'prePolygon'],
   methods: {
+    updateDatas(data) {
+      this.$emit('sendData', data)
+    },
     mapInit() {
       const _this = this
       this.map = new AMap.Map('eden-map', {
